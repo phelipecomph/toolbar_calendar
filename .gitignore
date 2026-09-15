@@ -1,0 +1,16 @@
+node_modules
+dist
+.DS_Store
+*.log
+
+# Rust / Tauri
+src-tauri/target
+src-tauri/gen
+
+# local data
+*.db
+*.db-wal
+*.db-shm
+
+# session logs (pessoal, fora do produto)
+inbox/

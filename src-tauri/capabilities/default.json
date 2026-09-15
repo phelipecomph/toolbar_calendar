@@ -1,0 +1,13 @@
+{
+  "identifier": "default",
+  "description": "Core capabilities for the strip and detail windows.",
+  "windows": ["strip", "detail"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "opener:default",
+    "autostart:default"
+  ]
+}
