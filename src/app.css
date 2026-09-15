@@ -89,6 +89,26 @@ body {
   z-index: 10;
 }
 
+.clock {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  white-space: nowrap;
+  text-transform: capitalize;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(90deg, rgba(24, 24, 24, 0) 0%, rgba(24, 24, 24, 0.92) 22%);
+  pointer-events: none;
+  z-index: 20;
+}
+
 /* ---- detail popover (Fase 2) ---- */
 .detail {
   width: 100%;

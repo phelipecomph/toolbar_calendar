@@ -16,6 +16,16 @@
   let now = $state(Date.now());
   let widthPx = $state(0);
 
+  const clock = $derived(fmtClock(now));
+
+  function fmtClock(ms: number): string {
+    const d = new Date(ms);
+    const wd = d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
+    const dm = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+    const hm = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    return `${wd} ${dm} ${hm}`;
+  }
+
   const win = $derived(makeWindow(now, BEFORE_MIN, AFTER_MIN));
   const view = $derived(
     layout(raw.filter((e) => isVisible(Date.parse(e.start), Date.parse(e.end), win)))
@@ -62,4 +72,5 @@
     </div>
   {/each}
   <NowMarker {win} {widthPx} />
+  <div class="clock">{clock}</div>
 </div>

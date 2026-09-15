@@ -13,15 +13,68 @@ mod sync;
 use state::AppState;
 use std::sync::Mutex;
 use tauri::Manager;
-use tauri_plugin_autostart::{ManagerExt, MacosLauncher};
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+
+const APP_DIR: &str = "com.pheli.agendastrip";
 
 fn main() {
+    // Release não tem console (windows_subsystem="windows"): grava panics em arquivo
+    // p/ diagnosticar crashes silenciosos.
+    std::panic::set_hook(Box::new(|info| {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let dir = format!("{appdata}\\{APP_DIR}");
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::write(format!("{dir}\\crash.log"), format!("{info}"));
+        }
+    }));
+
+    // Banco + estado ANTES do builder: o webview (em release, com assets embutidos)
+    // pode invocar comandos antes de `setup()` rodar — se o estado não estiver
+    // gerenciado ainda, `state()` panica. `.manage()` no builder elimina a corrida.
+    let data_dir = dirs::data_dir()
+        .map(|d| d.join(APP_DIR))
+        .expect("sem diretório de dados do usuário");
+    std::fs::create_dir_all(&data_dir).expect("criar diretório de dados");
+    let db_path = data_dir.join("agenda.db");
+    let conn = db::open(&db_path).expect("abrir SQLite");
+
+    match std::env::var("AGENDA_ICS_URL") {
+        Ok(u) => eprintln!("[startup] AGENDA_ICS_URL={u}"),
+        Err(_) => eprintln!("[startup] AGENDA_ICS_URL nao definida"),
+    }
+
+    // Seed opcional p/ teste: variável de ambiente AGENDA_ICS_URL.
+    if db::count_accounts(&conn).unwrap_or(0) == 0 {
+        if let Ok(url) = std::env::var("AGENDA_ICS_URL") {
+            if !url.is_empty() {
+                let acc = model::Account {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    kind: model::AccountKind::Ics,
+                    display_name: "ICS".into(),
+                    color: "#4285f4".into(),
+                    config: serde_json::json!({ "url": url }),
+                    sync_token: None,
+                    enabled: true,
+                };
+                let _ = db::add_account(&conn, &acc);
+            }
+        }
+    }
+    eprintln!(
+        "[startup] db={} contas={}",
+        db_path.display(),
+        db::count_accounts(&conn).unwrap_or(-1)
+    );
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None,
         ))
+        .manage(AppState {
+            db: Mutex::new(conn),
+        })
         .invoke_handler(tauri::generate_handler![
             commands::get_events,
             commands::get_config,
@@ -37,42 +90,6 @@ fn main() {
             commands::close_detail,
         ])
         .setup(|app| {
-            // Banco em app_data_dir.
-            let dir = app.path().app_data_dir()?;
-            std::fs::create_dir_all(&dir)?;
-            let db_path = dir.join("agenda.db");
-            let conn = db::open(&db_path)?;
-
-            match std::env::var("AGENDA_ICS_URL") {
-                Ok(u) => eprintln!("[startup] AGENDA_ICS_URL={u}"),
-                Err(_) => eprintln!("[startup] AGENDA_ICS_URL nao definida"),
-            }
-
-            // Seed opcional p/ teste: variável de ambiente AGENDA_ICS_URL.
-            if db::count_accounts(&conn).unwrap_or(0) == 0 {
-                if let Ok(url) = std::env::var("AGENDA_ICS_URL") {
-                    if !url.is_empty() {
-                        let acc = model::Account {
-                            id: uuid::Uuid::new_v4().to_string(),
-                            kind: model::AccountKind::Ics,
-                            display_name: "ICS".into(),
-                            color: "#4285f4".into(),
-                            config: serde_json::json!({ "url": url }),
-                            sync_token: None,
-                            enabled: true,
-                        };
-                        let _ = db::add_account(&conn, &acc);
-                    }
-                }
-            }
-
-            let n_acc = db::count_accounts(&conn).unwrap_or(-1);
-            eprintln!("[startup] db={} contas={n_acc}", db_path.display());
-
-            app.manage(AppState {
-                db: Mutex::new(conn),
-            });
-
             let strip = app
                 .get_webview_window("strip")
                 .expect("strip window missing");
@@ -130,14 +147,16 @@ fn main() {
                 }
             }
 
-            // Auto-seed Google (uma vez): se há credenciais no ambiente e nenhuma conta Google,
-            // dispara o OAuth interativo. Nas próximas execuções usa o keyring.
+            // Auto-seed Google (uma vez): credenciais no ambiente e nenhuma conta Google.
             let need_google = {
                 let st = app.state::<AppState>();
-                let conn = st.db.lock().map_err(|e| e.to_string())?;
-                db::list_accounts(&conn)
-                    .map(|v| v.iter().all(|a| a.kind != model::AccountKind::Google))
-                    .unwrap_or(false)
+                let guard = st.db.lock();
+                match guard {
+                    Ok(conn) => db::list_accounts(&conn)
+                        .map(|v| v.iter().all(|a| a.kind != model::AccountKind::Google))
+                        .unwrap_or(false),
+                    Err(_) => false,
+                }
             };
             if need_google {
                 if let (Ok(cid), Ok(csec)) = (
