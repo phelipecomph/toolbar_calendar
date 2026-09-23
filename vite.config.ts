@@ -22,6 +22,7 @@ export default defineConfig({
       input: {
         strip: resolve(__dirname, "index.html"),
         detail: resolve(__dirname, "detail.html"),
+        settings: resolve(__dirname, "settings.html"),
       },
     },
   },

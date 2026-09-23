@@ -24,11 +24,26 @@ export interface NormalizedEvent {
   color: string; // hex "#RRGGBB"
 }
 
+export type Edge = "top" | "bottom" | "left" | "right";
+
 export interface AppConfig {
   window_before_minutes: number;
   window_after_minutes: number;
   sync_interval_minutes: number;
   strip_height_logical: number;
+  edge: Edge;
+  monitor_index: number;
+}
+
+export interface MonitorDto {
+  index: number;
+  name: string;
+  width: number;
+  height: number;
+}
+
+export function isVertical(edge: Edge): boolean {
+  return edge === "left" || edge === "right";
 }
 
 // NormalizedEvent + computed lane placement

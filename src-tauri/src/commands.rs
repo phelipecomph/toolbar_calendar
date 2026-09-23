@@ -1,4 +1,4 @@
-use crate::model::{mock_events, Account, AccountKind, AppConfig, NormalizedEvent};
+use crate::model::{mock_events, Account, AccountKind, AppConfig, Edge, NormalizedEvent};
 use crate::{db, oauth, state::AppState, sync};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State};
 use tauri_plugin_opener::OpenerExt;
@@ -198,5 +198,103 @@ pub fn close_detail(app: AppHandle) -> Result<(), String> {
     if let Some(detail) = app.get_webview_window("detail") {
         let _ = detail.hide();
     }
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+pub struct MonitorDto {
+    pub index: usize,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[tauri::command]
+pub fn get_monitors(app: AppHandle) -> Result<Vec<MonitorDto>, String> {
+    let strip = app.get_webview_window("strip").ok_or("janela strip ausente")?;
+    let mons = strip.available_monitors().map_err(|e| e.to_string())?;
+    Ok(mons
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let s = m.size();
+            MonitorDto {
+                index: i,
+                name: m.name().cloned().unwrap_or_else(|| format!("Monitor {}", i + 1)),
+                width: s.width,
+                height: s.height,
+            }
+        })
+        .collect())
+}
+
+/// Persiste borda + monitor, re-doca a faixa e avisa o frontend (orientação).
+#[tauri::command]
+pub fn set_dock(
+    app: AppHandle,
+    state: State<AppState>,
+    monitor_index: usize,
+    edge: String,
+) -> Result<AppConfig, String> {
+    let edge = Edge::from_str(&edge).ok_or("borda inválida")?;
+    let mut cfg = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::load_config(&conn)?
+    };
+    cfg.edge = edge;
+    cfg.monitor_index = monitor_index;
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::save_config(&conn, &cfg)?;
+    }
+
+    #[cfg(windows)]
+    {
+        if let Some(strip) = app.get_webview_window("strip") {
+            if let Err(e) = crate::platform::appbar::redock(
+                &strip,
+                cfg.edge,
+                cfg.monitor_index,
+                cfg.strip_height_logical,
+            ) {
+                eprintln!("[dock] redock falhou: {e}");
+            }
+        }
+    }
+
+    let _ = app.emit("dock://changed", &cfg);
+    Ok(cfg)
+}
+
+/// Abre a janelinha de settings perto do relógio (fim da faixa).
+#[tauri::command]
+pub fn open_settings(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+    let cfg = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::load_config(&conn)?
+    };
+    let strip = app.get_webview_window("strip").ok_or("strip ausente")?;
+    let settings = app.get_webview_window("settings").ok_or("settings ausente")?;
+
+    let sp = strip.outer_position().map_err(|e| e.to_string())?;
+    let ss = strip.outer_size().map_err(|e| e.to_string())?;
+    let scale = strip.scale_factor().unwrap_or(1.0);
+    let w = (240.0 * scale) as i32;
+    let h = (230.0 * scale) as i32;
+
+    // Ancora perto do fim da faixa (onde está o relógio), pra dentro da tela.
+    let (x, y) = match cfg.edge {
+        Edge::Bottom => (sp.x + ss.width as i32 - w, sp.y - h),
+        Edge::Top => (sp.x + ss.width as i32 - w, sp.y + ss.height as i32),
+        Edge::Left => (sp.x + ss.width as i32, sp.y + ss.height as i32 - h),
+        Edge::Right => (sp.x - w, sp.y + ss.height as i32 - h),
+    };
+
+    settings
+        .set_position(PhysicalPosition::new(x, y))
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit("settings://open", &cfg);
+    settings.show().map_err(|e| e.to_string())?;
+    settings.set_focus().map_err(|e| e.to_string())?;
     Ok(())
 }

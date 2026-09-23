@@ -72,12 +72,43 @@ pub struct NormalizedEvent {
     pub color: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Edge {
+    Top,
+    #[default]
+    Bottom,
+    Left,
+    Right,
+}
+
+impl Edge {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "top" => Some(Edge::Top),
+            "bottom" => Some(Edge::Bottom),
+            "left" => Some(Edge::Left),
+            "right" => Some(Edge::Right),
+            _ => None,
+        }
+    }
+    /// true quando a faixa é vertical (lados) → timeline corre em Y.
+    #[allow(dead_code)]
+    pub fn is_vertical(&self) -> bool {
+        matches!(self, Edge::Left | Edge::Right)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub window_before_minutes: i64,
     pub window_after_minutes: i64,
     pub sync_interval_minutes: u64,
     pub strip_height_logical: u32,
+    #[serde(default)]
+    pub edge: Edge,
+    #[serde(default)]
+    pub monitor_index: usize,
 }
 
 impl Default for AppConfig {
@@ -86,7 +117,9 @@ impl Default for AppConfig {
             window_before_minutes: 60,
             window_after_minutes: 480,
             sync_interval_minutes: 3,
-            strip_height_logical: 28,
+            strip_height_logical: 24,
+            edge: Edge::Bottom,
+            monitor_index: 0,
         }
     }
 }

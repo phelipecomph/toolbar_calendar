@@ -41,6 +41,20 @@
         "visible": false,
         "focus": false,
         "shadow": true
+      },
+      {
+        "label": "settings",
+        "title": "Posição da faixa",
+        "url": "settings.html",
+        "width": 240,
+        "height": 230,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "visible": false,
+        "shadow": true
       }
     ],
     "security": {

@@ -1,9 +1,17 @@
 <script lang="ts">
   import { xOf, type TimeWindow } from "../lib/time";
 
-  let { win, widthPx }: { win: TimeWindow; widthPx: number } = $props();
+  let {
+    win,
+    mainPx,
+    vertical,
+  }: { win: TimeWindow; mainPx: number; vertical: boolean } = $props();
 
-  const left = $derived(xOf(win.now, win, widthPx));
+  const pos = $derived(xOf(win.now, win, mainPx));
 </script>
 
-<div class="now-marker" style="left:{left}px"></div>
+<div
+  class="now-marker"
+  class:vertical
+  style={vertical ? `top:${pos}px` : `left:${pos}px`}
+></div>

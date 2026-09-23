@@ -67,6 +67,12 @@ fn main() {
     );
 
     tauri::Builder::default()
+        // Deve ser o PRIMEIRO plugin: barra instâncias duplicadas (autostart + manual).
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("strip") {
+                let _ = w.show();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
@@ -88,6 +94,9 @@ fn main() {
             commands::open_in_browser,
             commands::open_detail,
             commands::close_detail,
+            commands::get_monitors,
+            commands::set_dock,
+            commands::open_settings,
         ])
         .setup(|app| {
             let strip = app
@@ -96,8 +105,21 @@ fn main() {
 
             #[cfg(windows)]
             {
-                if let Err(e) = platform::appbar::register(&strip, 24) {
-                    eprintln!("appbar register failed: {e}");
+                let cfg = {
+                    let st = app.state::<AppState>();
+                    st.db
+                        .lock()
+                        .ok()
+                        .and_then(|g| db::load_config(&g).ok())
+                        .unwrap_or_default()
+                };
+                if let Err(e) = platform::appbar::redock(
+                    &strip,
+                    cfg.edge,
+                    cfg.monitor_index,
+                    cfg.strip_height_logical,
+                ) {
+                    eprintln!("appbar redock failed: {e}");
                 }
                 let on_exit = strip.clone();
                 strip.on_window_event(move |event| {

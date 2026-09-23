@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Core capabilities for the strip and detail windows.",
-  "windows": ["strip", "detail"],
+  "windows": ["strip", "detail", "settings"],
   "permissions": [
     "core:default",
     "core:window:allow-hide",

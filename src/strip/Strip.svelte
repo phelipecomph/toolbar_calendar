@@ -4,35 +4,42 @@
   import NowMarker from "./NowMarker.svelte";
   import { layout } from "../lib/layout";
   import { makeWindow, isVisible, xOf } from "../lib/time";
-  import { getEvents, onEventsUpdated, triggerSync } from "../lib/ipc";
+  import {
+    getEvents,
+    onEventsUpdated,
+    triggerSync,
+    getConfig,
+    onDockChanged,
+    openSettings,
+  } from "../lib/ipc";
   import { MOCK_EVENTS } from "../lib/mocks";
-  import type { NormalizedEvent } from "../lib/types";
+  import { isVertical, type Edge, type NormalizedEvent } from "../lib/types";
 
-  // Fase 1: janela fixa. Fase 4 lê de AppConfig.
   const BEFORE_MIN = 60;
   const AFTER_MIN = 480;
 
   let raw = $state<NormalizedEvent[]>([]);
   let now = $state(Date.now());
   let widthPx = $state(0);
+  let heightPx = $state(0);
+  let edge = $state<Edge>("bottom");
 
-  const clock = $derived(fmtClock(now));
-
-  function fmtClock(ms: number): string {
-    const d = new Date(ms);
-    const wd = d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
-    const dm = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-    const hm = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-    return `${wd} ${dm} ${hm}`;
-  }
+  const vertical = $derived(isVertical(edge));
+  const mainPx = $derived(vertical ? heightPx : widthPx);
 
   const win = $derived(makeWindow(now, BEFORE_MIN, AFTER_MIN));
   const view = $derived(
     layout(raw.filter((e) => isVisible(Date.parse(e.start), Date.parse(e.end), win)))
   );
 
+  // relógio
+  const wd = $derived(
+    new Date(now).toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")
+  );
+  const dm = $derived(new Date(now).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }));
+  const hm = $derived(new Date(now).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+
   onMount(() => {
-    // Carrega eventos: tenta o backend; cai p/ mocks locais no preview de browser.
     (async () => {
       try {
         const from = new Date(now - BEFORE_MIN * 60_000).toISOString();
@@ -43,34 +50,53 @@
       }
     })();
 
-    const unlistenP = onEventsUpdated((ev) => (raw = ev)).catch(() => null);
+    getConfig()
+      .then((c) => (edge = c.edge))
+      .catch(() => {});
 
-    // Já inscrito no evento → força um sync agora (evita corrida com o sync do startup).
+    const unlistenEvents = onEventsUpdated((ev) => (raw = ev)).catch(() => null);
+    const unlistenDock = onDockChanged((c) => (edge = c.edge)).catch(() => null);
+
     triggerSync().catch(() => {});
 
-    // Marcador de "agora" e deslize da janela.
     const tick = setInterval(() => (now = Date.now()), 30_000);
 
     return () => {
       clearInterval(tick);
-      unlistenP.then((u) => u && u());
+      unlistenEvents.then((u) => u && u());
+      unlistenDock.then((u) => u && u());
     };
   });
 </script>
 
-<div class="strip" bind:clientWidth={widthPx}>
+<div
+  class="strip"
+  class:vertical
+  bind:clientWidth={widthPx}
+  bind:clientHeight={heightPx}
+>
   {#each view.laid as ev (ev.id)}
-    <EventBlock {ev} {win} {widthPx} />
+    <EventBlock {ev} {win} {mainPx} {vertical} />
   {/each}
+
   {#each view.overflow as ov (ov.startMs)}
     <div
       class="overflow-badge"
-      style="left:{Math.min(Math.max(xOf(ov.endMs, win, widthPx) - 20, 0), widthPx - 20)}px"
+      class:vertical
+      style={vertical
+        ? `top:${Math.min(Math.max(xOf(ov.endMs, win, mainPx) - 12, 0), mainPx - 12)}px`
+        : `left:${Math.min(Math.max(xOf(ov.endMs, win, mainPx) - 20, 0), mainPx - 20)}px`}
       title="+{ov.count} evento(s) sobrepostos ocultos"
     >
       +{ov.count}
     </div>
   {/each}
-  <NowMarker {win} {widthPx} />
-  <div class="clock">{clock}</div>
+
+  <NowMarker {win} {mainPx} {vertical} />
+
+  <button class="clock" class:vertical onclick={() => openSettings().catch(() => {})}>
+    <span>{wd}</span>
+    <span>{dm}</span>
+    <span>{hm}</span>
+  </button>
 </div>
