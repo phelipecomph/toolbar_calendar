@@ -39,6 +39,13 @@ pub async fn sync_once(app: &AppHandle) -> Result<(), String> {
         to.to_rfc3339()
     );
 
+    // No configured providers (e.g. running without any credentials): don't emit an
+    // empty list — leave whatever the frontend shows (mock events). No error.
+    if accounts.iter().all(|a| !a.enabled) {
+        emit_status(app, "idle", None);
+        return Ok(());
+    }
+
     for acc in accounts.iter().filter(|a| a.enabled) {
         let provider = match providers::build(acc) {
             Ok(p) => p,

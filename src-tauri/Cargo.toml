@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Desktop calendar timeline strip (Windows AppBar)"
 license = "MIT"
-repository = "https://github.com/phelipecomph/agenda-strip"
+repository = "https://github.com/phelipecomph/toolbar_calendar"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
