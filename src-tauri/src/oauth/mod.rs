@@ -66,7 +66,7 @@ pub fn authorize(client_id: &str, client_secret: &str) -> Result<Tokens, String>
     }
     let code = code.ok_or("callback without `code`")?;
     let _ = request.respond(tiny_http::Response::from_string(
-        "Authenticated with Agenda Strip. You can close this tab.",
+        "Authenticated with Toolbar Calendar. You can close this tab.",
     ));
 
     // Exchange code -> tokens (blocking).

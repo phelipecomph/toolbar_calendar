@@ -1,5 +1,5 @@
 [package]
-name = "agenda-strip"
+name = "toolbar_calendar"
 version = "0.1.0"
 edition = "2021"
 description = "Desktop calendar timeline strip (Windows AppBar)"

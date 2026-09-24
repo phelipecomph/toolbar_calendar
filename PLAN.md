@@ -1,4 +1,4 @@
-# Implementation plan / architecture — Agenda Strip
+# Implementation plan / architecture — Toolbar Calendar
 
 A thin calendar strip docked to a screen edge, showing the day as a timeline.
 Windows-only. Stack: Tauri v2 (Rust) + Svelte + plain CSS. AppBar via `SHAppBarMessage`.

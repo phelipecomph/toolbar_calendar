@@ -1,6 +1,6 @@
 BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//agenda-strip//sample//EN
+PRODID:-//toolbar_calendar//sample//EN
 CALSCALE:GREGORIAN
 BEGIN:VEVENT
 UID:h0@sample

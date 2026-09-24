@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Agenda Strip",
+  "productName": "Toolbar Calendar",
   "version": "0.1.0",
   "identifier": "com.agendastrip",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "strip",
-        "title": "Agenda Strip",
+        "title": "Toolbar Calendar",
         "url": "index.html",
         "width": 1280,
         "height": 24,

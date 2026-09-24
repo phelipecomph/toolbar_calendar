@@ -1,4 +1,4 @@
-# Agenda Strip
+# Toolbar Calendar
 
 A thin, always-visible calendar timeline docked to a screen edge on Windows.
 It shows your day as a horizontal (or vertical) strip: each event is a colored
