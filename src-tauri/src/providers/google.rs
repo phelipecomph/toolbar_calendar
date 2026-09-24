@@ -18,7 +18,7 @@ impl GoogleSource {
         let client_id = cfg
             .get("client_id")
             .and_then(|v| v.as_str())
-            .ok_or("conta Google sem client_id")?
+            .ok_or("Google account has no client_id")?
             .to_string();
         let client_secret = cfg
             .get("client_secret")
@@ -48,7 +48,7 @@ impl CalendarSource for GoogleSource {
             oauth::refresh(&self.client_id, &self.client_secret, &self.refresh_token).await?;
         let client = reqwest::Client::new();
 
-        // 1. Todas as agendas visíveis na conta (próprias + compartilhadas).
+        // 1. All calendars visible in the account (owned + shared).
         let cal_list: Value = client
             .get("https://www.googleapis.com/calendar/v3/users/me/calendarList")
             .bearer_auth(&access)
@@ -67,9 +67,9 @@ impl CalendarSource for GoogleSource {
             .and_then(|v| v.as_array())
             .cloned()
             .unwrap_or_default();
-        eprintln!("[google] {} agenda(s) na conta", calendars.len());
+        eprintln!("[google] {} calendar(s) in account", calendars.len());
 
-        // 2. Eventos de cada agenda; cor = backgroundColor da agenda (ou cor da conta).
+        // 2. Events per calendar; color = calendar's backgroundColor (or account color).
         let mut out = Vec::new();
         for cal in &calendars {
             let Some(cal_id) = cal.get("id").and_then(|v| v.as_str()) else {
@@ -90,10 +90,10 @@ impl CalendarSource for GoogleSource {
                 .await
             {
                 Ok(evs) => {
-                    eprintln!("[google]   \"{name}\": {} evento(s) na janela", evs.len());
+                    eprintln!("[google]   \"{name}\": {} event(s) in window", evs.len());
                     out.extend(evs);
                 }
-                Err(e) => eprintln!("[google]   \"{name}\": ERRO {e}"),
+                Err(e) => eprintln!("[google]   \"{name}\": ERROR {e}"),
             }
         }
 
@@ -170,7 +170,7 @@ fn map_event(it: &Value, account_id: &str, cal_name: &str, color: &str) -> Optio
     let (start, all_day) = parse_gdt(it.get("start")?)?;
     let (end, _) = parse_gdt(it.get("end")?)?;
 
-    // Título: usa o do evento; se vazio, cai pro nome da agenda.
+    // Title: use the event's; if empty, fall back to the calendar name.
     let title = it
         .get("summary")
         .and_then(|v| v.as_str())
@@ -178,10 +178,10 @@ fn map_event(it: &Value, account_id: &str, cal_name: &str, color: &str) -> Optio
         .unwrap_or(cal_name)
         .to_string();
 
-    // Descrição: prefixa o nome da agenda, mantendo a descrição original abaixo.
+    // Description: prefix the calendar name, keeping the original description below.
     let description = match it.get("description").and_then(|v| v.as_str()) {
-        Some(d) if !d.trim().is_empty() => Some(format!("Agenda: {cal_name}\n\n{d}")),
-        _ => Some(format!("Agenda: {cal_name}")),
+        Some(d) if !d.trim().is_empty() => Some(format!("Calendar: {cal_name}\n\n{d}")),
+        _ => Some(format!("Calendar: {cal_name}")),
     };
 
     let meeting_link = it
@@ -244,7 +244,7 @@ fn map_event(it: &Value, account_id: &str, cal_name: &str, color: &str) -> Optio
     })
 }
 
-/// Google start/end: `dateTime` (RFC3339 c/ offset) ou `date` (all-day). Normaliza p/ UTC.
+/// Google start/end: `dateTime` (RFC3339 with offset) or `date` (all-day). Normalizes to UTC.
 fn parse_gdt(v: &Value) -> Option<(String, bool)> {
     if let Some(dt) = v.get("dateTime").and_then(|x| x.as_str()) {
         let parsed = DateTime::parse_from_rfc3339(dt).ok()?;

@@ -17,7 +17,7 @@
   onMount(() => {
     const w = getCurrentWindow();
     const un1 = listen<NormalizedEvent>("detail://event", (e) => (ev = e.payload));
-    // Fecha ao perder foco (popover borderless always-on-top).
+    // Close on focus loss (borderless always-on-top popover).
     const un2 = w.onFocusChanged(({ payload: focused }) => {
       if (!focused) w.hide();
     });
@@ -34,15 +34,15 @@
     <div class="dt-time">{fmtDay(ev.start)} · {fmt(ev.start)}–{fmt(ev.end)}</div>
     {#if ev.location}<div class="dt-row">📍 {ev.location}</div>{/if}
     {#if ev.attendees && ev.attendees.length}
-      <div class="dt-row">👥 {ev.attendees.length} participante(s)</div>
+      <div class="dt-row">👥 {ev.attendees.length} attendee(s)</div>
     {/if}
     {#if ev.description}<div class="dt-desc">{ev.description}</div>{/if}
     <div class="dt-actions">
       {#if ev.meeting_link}
-        <button onclick={() => openInBrowser(ev!.meeting_link!)}>Entrar na reunião</button>
+        <button onclick={() => openInBrowser(ev!.meeting_link!)}>Join meeting</button>
       {/if}
       {#if ev.html_link}
-        <button onclick={() => openInBrowser(ev!.html_link!)}>Abrir no navegador</button>
+        <button onclick={() => openInBrowser(ev!.html_link!)}>Open in browser</button>
       {/if}
     </div>
   </div>

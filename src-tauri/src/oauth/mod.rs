@@ -8,11 +8,7 @@ const TOKEN: &str = "https://oauth2.googleapis.com/token";
 const SCOPE: &str = "https://www.googleapis.com/auth/calendar.readonly";
 
 pub struct Tokens {
-    #[allow(dead_code)]
-    pub access_token: String,
     pub refresh_token: Option<String>,
-    #[allow(dead_code)]
-    pub expires_in: i64,
 }
 
 fn b64url(bytes: &[u8]) -> String {
@@ -21,7 +17,7 @@ fn b64url(bytes: &[u8]) -> String {
 
 fn random_string(n: usize) -> String {
     let mut buf = vec![0u8; n];
-    getrandom::getrandom(&mut buf).expect("getrandom falhou");
+    getrandom::getrandom(&mut buf).expect("getrandom failed");
     b64url(&buf)
 }
 
@@ -35,14 +31,14 @@ fn urlenc(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }
 
-/// Fluxo interativo PKCE + loopback (BLOQUEANTE — rodar numa thread própria,
-/// nunca dentro do runtime tokio: usa reqwest::blocking).
+/// Interactive PKCE + loopback flow (BLOCKING — run on its own thread, never inside
+/// the tokio runtime: it uses reqwest::blocking).
 pub fn authorize(client_id: &str, client_secret: &str) -> Result<Tokens, String> {
     let server = tiny_http::Server::http("127.0.0.1:0").map_err(|e| e.to_string())?;
     let port = server
         .server_addr()
         .to_ip()
-        .ok_or("sem porta loopback")?
+        .ok_or("no loopback port")?
         .port();
     let redirect = format!("http://127.0.0.1:{port}");
     let (verifier, challenge) = pkce();
@@ -58,22 +54,22 @@ pub fn authorize(client_id: &str, client_secret: &str) -> Result<Tokens, String>
         st = state,
     );
 
-    webbrowser::open(&url).map_err(|e| format!("abrir navegador: {e}"))?;
+    webbrowser::open(&url).map_err(|e| format!("open browser: {e}"))?;
 
-    // Espera o redirect do Google.
+    // Wait for Google's redirect.
     let request = server.recv().map_err(|e| e.to_string())?;
     let raw = request.url().to_string(); // "/?code=...&state=..."
     let (code, got_state) = parse_callback(&raw);
     if got_state.as_deref() != Some(state.as_str()) {
-        let _ = request.respond(tiny_http::Response::from_string("state OAuth inválido."));
-        return Err("state OAuth não confere".into());
+        let _ = request.respond(tiny_http::Response::from_string("Invalid OAuth state."));
+        return Err("OAuth state mismatch".into());
     }
-    let code = code.ok_or("callback sem `code`")?;
+    let code = code.ok_or("callback without `code`")?;
     let _ = request.respond(tiny_http::Response::from_string(
-        "Autenticado no Agenda Strip. Pode fechar esta aba.",
+        "Authenticated with Agenda Strip. You can close this tab.",
     ));
 
-    // Troca code -> tokens (blocking).
+    // Exchange code -> tokens (blocking).
     let params = [
         ("grant_type", "authorization_code"),
         ("code", code.as_str()),
@@ -90,25 +86,18 @@ pub fn authorize(client_id: &str, client_secret: &str) -> Result<Tokens, String>
         .json()
         .map_err(|e| e.to_string())?;
 
-    let access_token = json
-        .get("access_token")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| format!("resposta de token sem access_token: {json}"))?
-        .to_string();
+    if json.get("access_token").and_then(|v| v.as_str()).is_none() {
+        return Err(format!("token response without access_token: {json}"));
+    }
     let refresh_token = json
         .get("refresh_token")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
-    let expires_in = json.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(3600);
 
-    Ok(Tokens {
-        access_token,
-        refresh_token,
-        expires_in,
-    })
+    Ok(Tokens { refresh_token })
 }
 
-/// Refresh assíncrono (usado pelo provider a cada sync).
+/// Async refresh (used by the provider on every sync).
 pub async fn refresh(
     client_id: &str,
     client_secret: &str,
@@ -133,7 +122,7 @@ pub async fn refresh(
     json.get("access_token")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .ok_or_else(|| format!("refresh sem access_token: {json}"))
+        .ok_or_else(|| format!("refresh without access_token: {json}"))
 }
 
 fn parse_callback(raw: &str) -> (Option<String>, Option<String>) {

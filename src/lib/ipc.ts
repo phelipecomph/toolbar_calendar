@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { AppConfig, MonitorDto, NormalizedEvent } from "./types";
 
-// Thin wrappers over the Tauri command / event contract (see PLAN.md §2.4).
+// Thin wrappers over the Tauri command / event contract (see PLAN.md).
 // Every call throws if not running inside Tauri (e.g. plain browser preview);
 // callers should fall back gracefully.
 
@@ -38,7 +38,7 @@ export function onDockChanged(cb: (cfg: AppConfig) => void): Promise<UnlistenFn>
   return listen<AppConfig>("dock://changed", (e) => cb(e.payload));
 }
 
-// Fase 2: abre a janela `detail` posicionada perto do bloco clicado.
+// Opens the `detail` window positioned near the clicked block.
 export async function openDetail(eventId: string, anchor: DOMRect): Promise<void> {
   return invoke("open_detail", {
     eventId,

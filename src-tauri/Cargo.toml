@@ -2,8 +2,9 @@
 name = "agenda-strip"
 version = "0.1.0"
 edition = "2021"
-description = "Desktop agenda timeline strip"
-authors = ["pheli"]
+description = "Desktop calendar timeline strip (Windows AppBar)"
+license = "MIT"
+repository = "https://github.com/phelipecomph/agenda-strip"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

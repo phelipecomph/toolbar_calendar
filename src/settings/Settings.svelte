@@ -10,10 +10,10 @@
   let selEdge = $state<Edge>("bottom");
 
   const EDGES: { key: Edge; label: string }[] = [
-    { key: "top", label: "Topo" },
-    { key: "bottom", label: "Base" },
-    { key: "left", label: "Esquerda" },
-    { key: "right", label: "Direita" },
+    { key: "top", label: "Top" },
+    { key: "bottom", label: "Bottom" },
+    { key: "left", label: "Left" },
+    { key: "right", label: "Right" },
   ];
 
   async function refresh(cfg?: AppConfig) {
@@ -53,7 +53,7 @@
 </script>
 
 <div class="settings">
-  <div class="st-title">Posição da faixa</div>
+  <div class="st-title">Strip position</div>
 
   <div class="st-label">Monitor</div>
   <div class="st-monitors">
@@ -68,11 +68,11 @@
       </button>
     {/each}
     {#if monitors.length === 0}
-      <div class="st-empty">nenhum monitor</div>
+      <div class="st-empty">no monitors</div>
     {/if}
   </div>
 
-  <div class="st-label">Canto</div>
+  <div class="st-label">Edge</div>
   <div class="st-edges">
     {#each EDGES as e (e.key)}
       <button

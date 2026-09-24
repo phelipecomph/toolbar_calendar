@@ -10,7 +10,7 @@ pub fn get_events(
     to: String,
 ) -> Result<Vec<NormalizedEvent>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    // Sem contas ainda → mostra mocks (DX na Fase 1/2).
+    // No accounts yet -> show mocks so the strip isn't empty on first run.
     if db::count_accounts(&conn)? == 0 {
         return Ok(mock_events());
     }
@@ -73,15 +73,15 @@ pub async fn trigger_sync(app: AppHandle) -> Result<(), String> {
     sync::sync_once(&app).await
 }
 
-/// Roda o fluxo OAuth do Google (abre navegador), grava conta + refresh token no keyring
-/// e dispara um sync. Reusável pela UI (Fase 4) e pelo auto-seed no startup.
+/// Runs the Google OAuth flow (opens the browser), stores the account + refresh token
+/// in the keyring and triggers a sync. Reused by the UI and by startup auto-seed.
 pub async fn add_google_account_flow(
     app: AppHandle,
     client_id: String,
     client_secret: String,
 ) -> Result<Account, String> {
-    // authorize() é bloqueante (tiny_http + reqwest::blocking) — roda em thread própria,
-    // fora do runtime tokio; aguardamos por polling sem travar o executor.
+    // authorize() is blocking (tiny_http + reqwest::blocking) -> run it on its own
+    // thread, outside the tokio runtime; poll for the result without blocking the executor.
     let cid = client_id.clone();
     let csec = client_secret.clone();
     let (tx, rx) = std::sync::mpsc::channel();
@@ -95,14 +95,14 @@ pub async fn add_google_account_flow(
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             }
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                return Err("fluxo OAuth interrompido".into());
+                return Err("OAuth flow interrupted".into());
             }
         }
     };
 
     let refresh = tokens
         .refresh_token
-        .ok_or("Google não devolveu refresh_token (revogue o acesso e refaça)")?;
+        .ok_or("Google returned no refresh_token (revoke access and try again)")?;
 
     let acc = Account {
         id: uuid::Uuid::new_v4().to_string(),
@@ -118,7 +118,8 @@ pub async fn add_google_account_flow(
         enabled: true,
     };
 
-    // Token PRIMEIRO: garante que qualquer sync que veja a conta já ache o refresh no keyring.
+    // Store the token FIRST so any sync that sees the account already finds the refresh
+    // token in the keyring.
     oauth::tokens::store_refresh(&acc.id, &refresh)?;
     {
         let state = app.state::<AppState>();
@@ -157,7 +158,7 @@ pub struct AnchorRect {
     pub height: f64,
 }
 
-/// Abre a janela `detail` posicionada acima do bloco clicado e envia o evento.
+/// Opens the `detail` window positioned above the clicked block and sends the event.
 #[tauri::command]
 pub fn open_detail(
     app: AppHandle,
@@ -170,11 +171,11 @@ pub fn open_detail(
         db::get_event(&conn, &event_id)?
     };
     let Some(event) = event else {
-        return Err("evento não encontrado".into());
+        return Err("event not found".into());
     };
 
-    let strip = app.get_webview_window("strip").ok_or("janela strip ausente")?;
-    let detail = app.get_webview_window("detail").ok_or("janela detail ausente")?;
+    let strip = app.get_webview_window("strip").ok_or("strip window missing")?;
+    let detail = app.get_webview_window("detail").ok_or("detail window missing")?;
 
     let scale = strip.scale_factor().unwrap_or(1.0);
     let strip_pos = strip.outer_position().map_err(|e| e.to_string())?;
@@ -211,7 +212,7 @@ pub struct MonitorDto {
 
 #[tauri::command]
 pub fn get_monitors(app: AppHandle) -> Result<Vec<MonitorDto>, String> {
-    let strip = app.get_webview_window("strip").ok_or("janela strip ausente")?;
+    let strip = app.get_webview_window("strip").ok_or("strip window missing")?;
     let mons = strip.available_monitors().map_err(|e| e.to_string())?;
     Ok(mons
         .iter()
@@ -228,7 +229,7 @@ pub fn get_monitors(app: AppHandle) -> Result<Vec<MonitorDto>, String> {
         .collect())
 }
 
-/// Persiste borda + monitor, re-doca a faixa e avisa o frontend (orientação).
+/// Persists edge + monitor, re-docks the strip and notifies the frontend (orientation).
 #[tauri::command]
 pub fn set_dock(
     app: AppHandle,
@@ -236,7 +237,7 @@ pub fn set_dock(
     monitor_index: usize,
     edge: String,
 ) -> Result<AppConfig, String> {
-    let edge = Edge::from_str(&edge).ok_or("borda inválida")?;
+    let edge = Edge::from_str(&edge).ok_or("invalid edge")?;
     let mut cfg = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::load_config(&conn)?
@@ -257,7 +258,7 @@ pub fn set_dock(
                 cfg.monitor_index,
                 cfg.strip_height_logical,
             ) {
-                eprintln!("[dock] redock falhou: {e}");
+                eprintln!("[dock] redock failed: {e}");
             }
         }
     }
@@ -266,15 +267,17 @@ pub fn set_dock(
     Ok(cfg)
 }
 
-/// Abre a janelinha de settings perto do relógio (fim da faixa).
+/// Opens the small settings window near the clock (far end of the strip).
 #[tauri::command]
 pub fn open_settings(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     let cfg = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::load_config(&conn)?
     };
-    let strip = app.get_webview_window("strip").ok_or("strip ausente")?;
-    let settings = app.get_webview_window("settings").ok_or("settings ausente")?;
+    let strip = app.get_webview_window("strip").ok_or("strip window missing")?;
+    let settings = app
+        .get_webview_window("settings")
+        .ok_or("settings window missing")?;
 
     let sp = strip.outer_position().map_err(|e| e.to_string())?;
     let ss = strip.outer_size().map_err(|e| e.to_string())?;
@@ -282,7 +285,7 @@ pub fn open_settings(app: AppHandle, state: State<AppState>) -> Result<(), Strin
     let w = (240.0 * scale) as i32;
     let h = (230.0 * scale) as i32;
 
-    // Ancora perto do fim da faixa (onde está o relógio), pra dentro da tela.
+    // Anchor near the far end of the strip (where the clock is), kept on-screen.
     let (x, y) = match cfg.edge {
         Edge::Bottom => (sp.x + ss.width as i32 - w, sp.y - h),
         Edge::Top => (sp.x + ss.width as i32 - w, sp.y + ss.height as i32),

@@ -32,12 +32,12 @@
     layout(raw.filter((e) => isVisible(Date.parse(e.start), Date.parse(e.end), win)))
   );
 
-  // relógio
+  // clock (uses the system locale)
   const wd = $derived(
-    new Date(now).toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")
+    new Date(now).toLocaleDateString([], { weekday: "short" }).replace(".", "")
   );
-  const dm = $derived(new Date(now).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }));
-  const hm = $derived(new Date(now).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+  const dm = $derived(new Date(now).toLocaleDateString([], { day: "2-digit", month: "2-digit" }));
+  const hm = $derived(new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
 
   onMount(() => {
     (async () => {
@@ -86,7 +86,7 @@
       style={vertical
         ? `top:${Math.min(Math.max(xOf(ov.endMs, win, mainPx) - 12, 0), mainPx - 12)}px`
         : `left:${Math.min(Math.max(xOf(ov.endMs, win, mainPx) - 20, 0), mainPx - 20)}px`}
-      title="+{ov.count} evento(s) sobrepostos ocultos"
+      title="+{ov.count} overlapping event(s) hidden"
     >
       +{ov.count}
     </div>

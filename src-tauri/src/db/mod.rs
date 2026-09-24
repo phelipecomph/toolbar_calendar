@@ -115,7 +115,7 @@ pub fn set_account_color(conn: &Connection, id: &str, color: &str) -> Result<(),
 
 // ---------- events ----------
 
-/// Substitui todos os eventos de uma conta pelos recém-sincronizados (delete + insert).
+/// Replaces all of an account's events with the freshly synced ones (delete + insert).
 pub fn replace_account_events(
     conn: &mut Connection,
     account_id: &str,
@@ -167,7 +167,7 @@ fn row_to_event(r: &rusqlite::Row) -> rusqlite::Result<NormalizedEvent> {
 const EVENT_COLS: &str =
     "id, account_id, title, start_utc, end_utc, all_day, description, location, meeting_link, html_link, attendees_json, color";
 
-/// Eventos que intersectam a janela [from, to] (ISO8601 UTC).
+/// Events that intersect the window [from, to] (ISO8601 UTC).
 pub fn query_range(conn: &Connection, from: &str, to: &str) -> Result<Vec<NormalizedEvent>, String> {
     let sql = format!(
         "SELECT {EVENT_COLS} FROM events WHERE end_utc > ?1 AND start_utc < ?2 ORDER BY start_utc"

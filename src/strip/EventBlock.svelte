@@ -14,16 +14,16 @@
   const startMs = $derived(Date.parse(ev.start));
   const endMs = $derived(Date.parse(ev.end));
 
-  // Cap de legibilidade: lanes além de MAX_LANES ficam ocultas (badge +N).
+  // Readability cap: lanes beyond MAX_LANES are hidden (surfaced via the +N badge).
   const lanes = $derived(Math.min(ev.laneCount, MAX_LANES));
   const hidden = $derived(ev.lane >= MAX_LANES);
-  const laneSize = $derived(100 / lanes); // % do eixo cruzado
+  const laneSize = $derived(100 / lanes); // % of the cross axis
 
-  const mainPos = $derived(xOf(startMs, win, mainPx)); // posição no eixo do tempo
+  const mainPos = $derived(xOf(startMs, win, mainPx)); // position on the time axis
   const mainLen = $derived(widthOf(startMs, endMs, win, mainPx));
   const crossPos = $derived(ev.lane * laneSize);
 
-  // Eixo do tempo = X (horizontal) ou Y (vertical). Lanes no eixo cruzado.
+  // Time axis = X (horizontal) or Y (vertical). Lanes go on the cross axis.
   const style = $derived(
     vertical
       ? `top:${mainPos}px; height:${mainLen}px; left:${crossPos}%; width:${laneSize}%; background:${ev.color};`

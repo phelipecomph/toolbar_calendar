@@ -115,7 +115,7 @@ body {
   color: #9ecbff;
 }
 
-/* faixa vertical (lados): relógio empilhado embaixo */
+/* vertical strip (sides): clock stacked at the bottom */
 .clock.vertical {
   top: auto;
   right: 0;
@@ -214,7 +214,7 @@ body {
   font-size: 11px;
 }
 
-/* ---- detail popover (Fase 2) ---- */
+/* ---- detail popover ---- */
 .detail {
   width: 100%;
   height: 100%;

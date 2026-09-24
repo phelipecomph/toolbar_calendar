@@ -1,6 +1,6 @@
 use keyring::Entry;
 
-// Refresh tokens ficam no Windows Credential Manager, nunca em arquivo.
+// Refresh tokens live in the Windows Credential Manager, never in a file.
 const SERVICE: &str = "agenda-strip";
 
 pub fn store_refresh(account_id: &str, token: &str) -> Result<(), String> {

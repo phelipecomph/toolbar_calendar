@@ -1,5 +1,5 @@
-//! Registra a faixa como AppBar do Windows (SHAppBarMessage), reservando espaço
-//! na borda escolhida (topo/base/esquerda/direita) do monitor escolhido.
+//! Registers the strip as a Windows AppBar (SHAppBarMessage), reserving space on the
+//! chosen edge (top/bottom/left/right) of the chosen monitor.
 
 use crate::model::Edge;
 use tauri::WebviewWindow;
@@ -12,7 +12,7 @@ use tauri::{PhysicalPosition, PhysicalSize};
 
 const APPBAR_CALLBACK: u32 = 0x0400 + 1;
 
-/// Retângulo do monitor em pixels físicos (coords de tela virtual).
+/// Monitor rectangle in physical pixels (virtual-screen coordinates).
 #[derive(Clone, Copy)]
 pub struct DockRect {
     pub left: i32,
@@ -46,7 +46,7 @@ fn edge_const(edge: Edge) -> u32 {
     }
 }
 
-/// Calcula o retângulo fino da faixa dentro do monitor, conforme a borda.
+/// Computes the thin strip rectangle within the monitor for the given edge.
 fn strip_rect(edge: Edge, mon: DockRect, thickness: i32) -> RECT {
     match edge {
         Edge::Bottom => RECT {
@@ -76,7 +76,7 @@ fn strip_rect(edge: Edge, mon: DockRect, thickness: i32) -> RECT {
     }
 }
 
-// Re-fixa a dimensão fina a partir da borda externa (após o SO ajustar no QUERYPOS).
+// Re-pin the thin dimension from the outer edge (after the OS adjusts it in QUERYPOS).
 fn repin_thickness(edge: Edge, rc: &mut RECT, thickness: i32) {
     match edge {
         Edge::Bottom => rc.top = rc.bottom - thickness,
@@ -86,7 +86,7 @@ fn repin_thickness(edge: Edge, rc: &mut RECT, thickness: i32) {
     }
 }
 
-/// Registra e posiciona a faixa. `thickness` em px físicos.
+/// Registers and positions the strip. `thickness` in physical pixels.
 pub fn register(
     window: &WebviewWindow,
     edge: Edge,
@@ -97,7 +97,7 @@ pub fn register(
     unsafe {
         let mut abd = base_data(hwnd);
         if SHAppBarMessage(ABM_NEW, &mut abd) == 0 {
-            return Err("ABM_NEW falhou".into());
+            return Err("ABM_NEW failed".into());
         }
 
         abd.uEdge = edge_const(edge);
@@ -116,7 +116,7 @@ pub fn register(
             r.right - r.left,
             r.bottom - r.top
         );
-        // Posiciona/dimensiona via Tauri (trata DPI corretamente p/ o webview).
+        // Position/size via Tauri (handles DPI correctly for the webview).
         window
             .set_position(PhysicalPosition::new(r.left, r.top))
             .map_err(|e| e.to_string())?;
@@ -130,7 +130,7 @@ pub fn register(
     Ok(())
 }
 
-/// Remove o registro de AppBar, liberando o espaço reservado.
+/// Unregisters the AppBar, freeing the reserved space.
 pub fn unregister(window: &WebviewWindow) -> Result<(), String> {
     let hwnd = hwnd_of(window)?;
     unsafe {
@@ -140,8 +140,8 @@ pub fn unregister(window: &WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
-/// Re-doca no monitor `index` e borda `edge` (unregister + register), usando os
-/// monitores que o Tauri enxerga. `thickness_logical` em px lógicos.
+/// Re-docks on monitor `index` and edge `edge` (unregister + register), using the
+/// monitors Tauri reports. `thickness_logical` in logical pixels.
 pub fn redock(
     window: &WebviewWindow,
     edge: Edge,
@@ -164,12 +164,12 @@ pub fn redock(
     let mon = monitors
         .get(monitor_index)
         .or_else(|| monitors.first())
-        .ok_or("nenhum monitor disponível")?;
+        .ok_or("no monitor available")?;
 
     let p = mon.position();
     let s = mon.size();
     eprintln!(
-        "[dock] escolhido monitor[{monitor_index}] edge={edge:?} pos=({},{}) size={}x{}",
+        "[dock] chosen monitor[{monitor_index}] edge={edge:?} pos=({},{}) size={}x{}",
         p.x, p.y, s.width, s.height
     );
     let rect = DockRect {

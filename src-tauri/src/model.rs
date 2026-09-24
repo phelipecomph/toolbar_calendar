@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub enum AccountKind {
     Ics,
     Google,
+    /// Reserved: Microsoft Graph provider (not implemented yet; the trait is ready).
     Graph,
 }
 
@@ -36,7 +37,7 @@ pub struct Attendee {
     pub status: Option<String>,
 }
 
-/// Conta de calendário. `config` guarda o específico do provider (ex.: URL do ICS).
+/// A calendar account. `config` holds provider-specific data (e.g. the ICS URL).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     pub id: String,
@@ -49,8 +50,8 @@ pub struct Account {
     pub enabled: bool,
 }
 
-/// Evento normalizado — contrato único entre providers, cache e frontend.
-/// Espelhado em src/lib/types.ts.
+/// Normalized event — the single contract between providers, cache and frontend.
+/// Mirrored in src/lib/types.ts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NormalizedEvent {
     pub id: String,
@@ -92,11 +93,6 @@ impl Edge {
             _ => None,
         }
     }
-    /// true quando a faixa é vertical (lados) → timeline corre em Y.
-    #[allow(dead_code)]
-    pub fn is_vertical(&self) -> bool {
-        matches!(self, Edge::Left | Edge::Right)
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,7 +120,7 @@ impl Default for AppConfig {
     }
 }
 
-/// Fase 1/dev: eventos mockados relativos a agora. Usados só quando não há contas.
+/// Dev/demo mock events relative to now. Used only when there are no accounts.
 pub fn mock_events() -> Vec<NormalizedEvent> {
     let now = Utc::now();
     let at = |min: i64| (now + Duration::minutes(min)).to_rfc3339();
@@ -148,10 +144,10 @@ pub fn mock_events() -> Vec<NormalizedEvent> {
     vec![
         mk("m1", "acc-personal", "#4285f4", "Standup", -20, 10),
         mk("m2", "acc-work", "#0b8043", "Design review", 30, 120),
-        mk("m3", "acc-work", "#0b8043", "1:1 com Ana", 60, 90),
-        mk("m4", "acc-personal", "#4285f4", "Dentista", 75, 105),
+        mk("m3", "acc-work", "#0b8043", "1:1 with Ana", 60, 90),
+        mk("m4", "acc-personal", "#4285f4", "Dentist", 75, 105),
         mk("m5", "acc-side", "#f4511e", "Deploy window", 150, 210),
-        mk("m6", "acc-work", "#0b8043", "Almoço", 240, 300),
-        mk("m7", "acc-personal", "#4285f4", "Foco: relatório", 320, 440),
+        mk("m6", "acc-work", "#0b8043", "Lunch", 240, 300),
+        mk("m7", "acc-personal", "#4285f4", "Focus: report", 320, 440),
     ]
 }

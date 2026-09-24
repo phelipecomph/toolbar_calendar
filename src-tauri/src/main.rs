@@ -1,4 +1,4 @@
-// Evita janela de console extra no Windows em release.
+// Avoid an extra console window on Windows in release.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
@@ -15,11 +15,11 @@ use std::sync::Mutex;
 use tauri::Manager;
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
-const APP_DIR: &str = "com.pheli.agendastrip";
+const APP_DIR: &str = "com.agendastrip";
 
 fn main() {
-    // Release não tem console (windows_subsystem="windows"): grava panics em arquivo
-    // p/ diagnosticar crashes silenciosos.
+    // Release has no console (windows_subsystem="windows"): write panics to a file
+    // to diagnose silent crashes.
     std::panic::set_hook(Box::new(|info| {
         if let Ok(appdata) = std::env::var("APPDATA") {
             let dir = format!("{appdata}\\{APP_DIR}");
@@ -28,22 +28,22 @@ fn main() {
         }
     }));
 
-    // Banco + estado ANTES do builder: o webview (em release, com assets embutidos)
-    // pode invocar comandos antes de `setup()` rodar — se o estado não estiver
-    // gerenciado ainda, `state()` panica. `.manage()` no builder elimina a corrida.
+    // DB + state BEFORE the builder: in release the webview (with embedded assets) can
+    // invoke commands before `setup()` runs — if state isn't managed yet, `state()`
+    // panics. Calling `.manage()` on the builder removes that race.
     let data_dir = dirs::data_dir()
         .map(|d| d.join(APP_DIR))
-        .expect("sem diretório de dados do usuário");
-    std::fs::create_dir_all(&data_dir).expect("criar diretório de dados");
+        .expect("no user data directory");
+    std::fs::create_dir_all(&data_dir).expect("create data directory");
     let db_path = data_dir.join("agenda.db");
-    let conn = db::open(&db_path).expect("abrir SQLite");
+    let conn = db::open(&db_path).expect("open SQLite");
 
     match std::env::var("AGENDA_ICS_URL") {
         Ok(u) => eprintln!("[startup] AGENDA_ICS_URL={u}"),
-        Err(_) => eprintln!("[startup] AGENDA_ICS_URL nao definida"),
+        Err(_) => eprintln!("[startup] AGENDA_ICS_URL not set"),
     }
 
-    // Seed opcional p/ teste: variável de ambiente AGENDA_ICS_URL.
+    // Optional seed for testing: the AGENDA_ICS_URL environment variable.
     if db::count_accounts(&conn).unwrap_or(0) == 0 {
         if let Ok(url) = std::env::var("AGENDA_ICS_URL") {
             if !url.is_empty() {
@@ -61,13 +61,13 @@ fn main() {
         }
     }
     eprintln!(
-        "[startup] db={} contas={}",
+        "[startup] db={} accounts={}",
         db_path.display(),
         db::count_accounts(&conn).unwrap_or(-1)
     );
 
     tauri::Builder::default()
-        // Deve ser o PRIMEIRO plugin: barra instâncias duplicadas (autostart + manual).
+        // Must be the FIRST plugin: blocks duplicate instances (autostart + manual).
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(w) = app.get_webview_window("strip") {
                 let _ = w.show();
@@ -133,9 +133,9 @@ fn main() {
                 let _ = &strip;
             }
 
-            // Auto-reparo no startup:
-            //  - conta Google sem token no keyring → remove (força re-login);
-            //  - conta ICS apontando p/ arquivo local (sample de teste) → remove.
+            // Startup self-repair:
+            //  - Google account without a keyring token -> remove (forces re-login);
+            //  - ICS account pointing at a local file (test sample) -> remove.
             let broken: Vec<String> = {
                 let st = app.state::<AppState>();
                 let guard = st.db.lock();
@@ -161,7 +161,7 @@ fn main() {
                 }
             };
             for id in broken {
-                eprintln!("[startup] removendo conta inválida/teste {id}");
+                eprintln!("[startup] removing invalid/test account {id}");
                 let st = app.state::<AppState>();
                 let guard = st.db.lock();
                 if let Ok(conn) = guard {
@@ -169,7 +169,7 @@ fn main() {
                 }
             }
 
-            // Auto-seed Google (uma vez): credenciais no ambiente e nenhuma conta Google.
+            // Google auto-seed (once): env credentials present and no Google account yet.
             let need_google = {
                 let st = app.state::<AppState>();
                 let guard = st.db.lock();
@@ -188,20 +188,20 @@ fn main() {
                     if !cid.is_empty() && !csec.is_empty() {
                         let h = app.handle().clone();
                         tauri::async_runtime::spawn(async move {
-                            eprintln!("[google] iniciando OAuth (abrindo navegador)...");
+                            eprintln!("[google] starting OAuth (opening browser)...");
                             match commands::add_google_account_flow(h, cid, csec).await {
-                                Ok(a) => eprintln!("[google] conta adicionada: {}", a.id),
-                                Err(e) => eprintln!("[google] OAuth falhou: {e}"),
+                                Ok(a) => eprintln!("[google] account added: {}", a.id),
+                                Err(e) => eprintln!("[google] OAuth failed: {e}"),
                             }
                         });
                     }
                 }
             }
 
-            // Autostart no login do Windows (idempotente).
+            // Autostart on Windows login (idempotent).
             let _ = app.autolaunch().enable();
 
-            // Sync inicial + timer.
+            // Initial sync + timer.
             sync::start_timer(app.handle().clone());
 
             Ok(())

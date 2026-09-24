@@ -17,12 +17,12 @@ fn emit_status(app: &AppHandle, state: &str, error: Option<String>) {
     );
 }
 
-/// Roda um ciclo de sync: busca todos os providers, grava no SQLite e emite ao frontend.
+/// Runs one sync cycle: fetch all providers, write to SQLite and emit to the frontend.
 pub async fn sync_once(app: &AppHandle) -> Result<(), String> {
     emit_status(app, "syncing", None);
     let state = app.state::<AppState>();
 
-    // snapshot config + contas (lock curto, solto antes de qualquer await)
+    // Snapshot config + accounts (short lock, released before any await).
     let (cfg, accounts) = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         (db::load_config(&conn)?, db::list_accounts(&conn)?)
@@ -33,7 +33,7 @@ pub async fn sync_once(app: &AppHandle) -> Result<(), String> {
     let to = now + Duration::minutes(cfg.window_after_minutes);
 
     eprintln!(
-        "[sync] {} conta(s), janela {} .. {}",
+        "[sync] {} account(s), window {} .. {}",
         accounts.len(),
         from.to_rfc3339(),
         to.to_rfc3339()
@@ -49,16 +49,16 @@ pub async fn sync_once(app: &AppHandle) -> Result<(), String> {
         };
         match provider.list_events(from, to).await {
             Ok(events) => {
-                eprintln!("[sync] {}: {} evento(s) na janela", acc.display_name, events.len());
+                eprintln!("[sync] {}: {} event(s) in window", acc.display_name, events.len());
                 let mut conn = state.db.lock().map_err(|e| e.to_string())?;
                 if let Err(e) = db::replace_account_events(&mut conn, &acc.id, &events) {
-                    eprintln!("[sync] gravar {}: {e}", acc.display_name);
+                    eprintln!("[sync] write {}: {e}", acc.display_name);
                 }
             }
             Err(e) => {
-                eprintln!("[sync] {}: ERRO {e}", acc.display_name);
-                // Token do Google revogado/expirado (Testing mode ~7 dias) → reabre login
-                // usando as credenciais salvas na conta (sem env).
+                eprintln!("[sync] {}: ERROR {e}", acc.display_name);
+                // Google token revoked/expired (Testing mode ~7 days) -> reopen login
+                // using the credentials stored on the account (no env needed).
                 if acc.kind == AccountKind::Google && e.contains("invalid_grant") {
                     maybe_reconnect_google(app, acc);
                 }
@@ -81,26 +81,26 @@ pub async fn sync_once(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Reabre o OAuth do Google (uma vez por processo) reusando client_id/secret salvos
-/// na conta, grava o novo refresh token no keyring e re-sincroniza.
+/// Reopens the Google OAuth flow (once per process) reusing the client_id/secret stored
+/// on the account, saves the new refresh token in the keyring and re-syncs.
 fn maybe_reconnect_google(app: &AppHandle, acc: &Account) {
     static BUSY: AtomicBool = AtomicBool::new(false);
     if BUSY.swap(true, Ordering::SeqCst) {
-        return; // já reconectando
+        return; // already reconnecting
     }
 
     let cid = acc.config.get("client_id").and_then(|v| v.as_str()).map(String::from);
     let csec = acc.config.get("client_secret").and_then(|v| v.as_str()).map(String::from);
     let (Some(cid), Some(csec)) = (cid, csec) else {
         BUSY.store(false, Ordering::SeqCst);
-        eprintln!("[google] sem credenciais salvas p/ reconectar");
+        eprintln!("[google] no stored credentials to reconnect");
         return;
     };
     let account_id = acc.id.clone();
     let app = app.clone();
 
     tauri::async_runtime::spawn(async move {
-        eprintln!("[google] token expirado → reabrindo login...");
+        eprintln!("[google] token expired -> reopening login...");
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let _ = tx.send(oauth::authorize(&cid, &csec));
@@ -112,7 +112,7 @@ fn maybe_reconnect_google(app: &AppHandle, acc: &Account) {
                     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    break Err("thread OAuth encerrada".into())
+                    break Err("OAuth thread ended".into())
                 }
             }
         };
@@ -122,24 +122,24 @@ fn maybe_reconnect_google(app: &AppHandle, acc: &Account) {
                     if let Err(e) = oauth::tokens::store_refresh(&account_id, &rt) {
                         eprintln!("[google] store_refresh: {e}");
                     } else {
-                        eprintln!("[google] reconectado.");
+                        eprintln!("[google] reconnected.");
                         let _ = sync_once(&app).await;
                     }
                 }
-                None => eprintln!("[google] reconnect sem refresh_token"),
+                None => eprintln!("[google] reconnect returned no refresh_token"),
             },
-            Err(e) => eprintln!("[google] reconnect falhou: {e}"),
+            Err(e) => eprintln!("[google] reconnect failed: {e}"),
         }
         BUSY.store(false, Ordering::SeqCst);
     });
 }
 
-/// Loop de sync a cada N minutos (N vem da config, relido a cada volta).
+/// Sync loop every N minutes (N comes from config, re-read each iteration).
 pub fn start_timer(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         loop {
             if let Err(e) = sync_once(&app).await {
-                eprintln!("[sync] erro: {e}");
+                eprintln!("[sync] error: {e}");
             }
             let mins = {
                 let state = app.state::<AppState>();

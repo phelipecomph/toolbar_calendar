@@ -4,7 +4,7 @@ use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
 use icalendar::{Calendar, CalendarComponent, CalendarDateTime, Component, DatePerhapsTime};
 use rrule::{RRuleSet, Tz as RTz};
 
-/// Provider de arquivo/URL iCal (ICS). Sem OAuth: só GET + parse.
+/// iCal (ICS) file/URL provider. No OAuth: just GET + parse.
 pub struct IcsSource {
     url: String,
     account_id: String,
@@ -17,7 +17,7 @@ impl IcsSource {
             .config
             .get("url")
             .and_then(|v| v.as_str())
-            .ok_or("conta ICS sem `url` no config")?
+            .ok_or("ICS account has no `url` in config")?
             .to_string();
         Ok(Self {
             url,
@@ -34,16 +34,16 @@ impl CalendarSource for IcsSource {
         from: DateTime<Utc>,
         to: DateTime<Utc>,
     ) -> Result<Vec<NormalizedEvent>, String> {
-        // http(s) → GET; qualquer outra coisa → caminho de arquivo local (útil p/ teste).
+        // http(s) -> GET; anything else -> local file path (handy for testing).
         let text = if self.url.starts_with("http") {
             reqwest::get(self.url.as_str())
                 .await
-                .map_err(|e| format!("GET ICS falhou: {e}"))?
+                .map_err(|e| format!("ICS GET failed: {e}"))?
                 .text()
                 .await
-                .map_err(|e| format!("corpo ICS inválido: {e}"))?
+                .map_err(|e| format!("invalid ICS body: {e}"))?
         } else {
-            std::fs::read_to_string(&self.url).map_err(|e| format!("ler ICS local: {e}"))?
+            std::fs::read_to_string(&self.url).map_err(|e| format!("read local ICS: {e}"))?
         };
 
         let calendar: Calendar = text.parse().map_err(|e| format!("parse ICS: {e}"))?;
@@ -66,18 +66,18 @@ impl CalendarSource for IcsSource {
                 .get_uid()
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| start_dt.timestamp().to_string());
-            let title = ev.get_summary().unwrap_or("(sem título)").to_string();
+            let title = ev.get_summary().unwrap_or("(untitled)").to_string();
             let description = ev.get_description().map(|s| s.to_string());
             let location = ev.property_value("LOCATION").map(|s| s.to_string());
             let link = ev.property_value("URL").map(|s| s.to_string());
 
-            // Recorrente → expande dentro da janela; senão → instância única.
+            // Recurring -> expand within the window; otherwise -> single instance.
             let recurring = ev.property_value("RRULE").is_some();
             let starts: Vec<DateTime<Utc>> = if recurring {
                 match expand(ev.property_value("RRULE").unwrap(), start_dt, duration, from, to) {
                     Ok(v) => v,
                     Err(e) => {
-                        eprintln!("[ics] RRULE {uid}: {e} (usando só 1ª instância)");
+                        eprintln!("[ics] RRULE {uid}: {e} (using first instance only)");
                         vec![start_dt]
                     }
                 }
@@ -117,8 +117,8 @@ impl CalendarSource for IcsSource {
     }
 }
 
-/// Expande uma RRULE em ocorrências (UTC) que intersectam [from, to].
-/// Usa o DTSTART já convertido p/ UTC (recorrência computada em UTC).
+/// Expands an RRULE into (UTC) occurrences that intersect [from, to].
+/// Uses the DTSTART already converted to UTC (recurrence computed in UTC).
 fn expand(
     rrule_val: &str,
     start_dt: DateTime<Utc>,
@@ -133,7 +133,7 @@ fn expand(
     );
     let set: RRuleSet = spec.parse().map_err(|e| format!("{e}"))?;
 
-    // Começa antes da janela por 1 duração p/ pegar ocorrências ainda em andamento.
+    // Start one duration before the window to catch occurrences still in progress.
     let after = (from - duration).with_timezone(&RTz::UTC);
     let before = to.with_timezone(&RTz::UTC);
 
@@ -145,7 +145,7 @@ fn expand(
         .collect())
 }
 
-/// Converte DatePerhapsTime -> (UTC, all_day). Retorna (None, false) se ausente/inválido.
+/// Converts DatePerhapsTime -> (UTC, all_day). Returns (None, false) if missing/invalid.
 fn to_utc(d: Option<DatePerhapsTime>) -> (Option<DateTime<Utc>>, bool) {
     let Some(d) = d else {
         return (None, false);
