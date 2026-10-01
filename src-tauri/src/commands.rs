@@ -1,6 +1,6 @@
 use crate::model::{mock_events, Account, AccountKind, AppConfig, Edge, NormalizedEvent};
 use crate::{db, oauth, state::AppState, sync};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 
 #[tauri::command]
@@ -150,12 +150,58 @@ pub fn open_in_browser(app: AppHandle, url: String) -> Result<(), String> {
 #[derive(serde::Deserialize)]
 pub struct AnchorRect {
     pub x: f64,
-    #[allow(dead_code)]
     pub y: f64,
     #[allow(dead_code)]
     pub width: f64,
     #[allow(dead_code)]
     pub height: f64,
+}
+
+/// Places a popup adjacent to the strip on its screen-interior side, then clamps it
+/// fully inside the monitor so it's never off-screen. Anchored to the monitor rect
+/// (not the strip window, which can be stale right after a redock).
+///
+/// `along_px` = offset along the main axis from the monitor's near corner; `None`
+/// means "far end" (where the clock sits). `thickness_px` = strip thickness. Physical px.
+fn place_popup(
+    strip: &WebviewWindow,
+    edge: Edge,
+    monitor_index: usize,
+    thickness_px: i32,
+    along_px: Option<i32>,
+    w: i32,
+    h: i32,
+) -> Result<PhysicalPosition<i32>, String> {
+    let mons = strip.available_monitors().map_err(|e| e.to_string())?;
+    let (ml, mt, mr, mb) = match mons.get(monitor_index).or_else(|| mons.first()) {
+        Some(m) => {
+            let p = m.position();
+            let s = m.size();
+            (p.x, p.y, p.x + s.width as i32, p.y + s.height as i32)
+        }
+        None => {
+            let sp = strip.outer_position().map_err(|e| e.to_string())?;
+            let ss = strip.outer_size().map_err(|e| e.to_string())?;
+            (sp.x, sp.y, sp.x + ss.width as i32, sp.y + ss.height as i32)
+        }
+    };
+
+    let horizontal = matches!(edge, Edge::Top | Edge::Bottom);
+    let main_len = if horizontal { mr - ml } else { mb - mt };
+    let along = along_px.unwrap_or(main_len);
+
+    // Open toward the screen interior; align to the anchor along the main axis.
+    let (mut x, mut y) = match edge {
+        Edge::Bottom => (ml + along - w / 2, mb - thickness_px - h),
+        Edge::Top => (ml + along - w / 2, mt + thickness_px),
+        Edge::Left => (ml + thickness_px, mt + along - h / 2),
+        Edge::Right => (mr - thickness_px - w, mt + along - h / 2),
+    };
+
+    // Clamp fully inside the monitor.
+    x = x.clamp(ml, (mr - w).max(ml));
+    y = y.clamp(mt, (mb - h).max(mt));
+    Ok(PhysicalPosition::new(x, y))
 }
 
 /// Opens the `detail` window positioned above the clicked block and sends the event.
@@ -166,9 +212,9 @@ pub fn open_detail(
     event_id: String,
     anchor: AnchorRect,
 ) -> Result<(), String> {
-    let event = {
+    let (event, cfg) = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
-        db::get_event(&conn, &event_id)?
+        (db::get_event(&conn, &event_id)?, db::load_config(&conn)?)
     };
     let Some(event) = event else {
         return Err("event not found".into());
@@ -178,14 +224,16 @@ pub fn open_detail(
     let detail = app.get_webview_window("detail").ok_or("detail window missing")?;
 
     let scale = strip.scale_factor().unwrap_or(1.0);
-    let strip_pos = strip.outer_position().map_err(|e| e.to_string())?;
-    let detail_h_logical = 200.0_f64;
-    let x = strip_pos.x + (anchor.x * scale) as i32;
-    let y = strip_pos.y - (detail_h_logical * scale) as i32;
+    let (w, h) = ((320.0 * scale) as i32, (200.0 * scale) as i32);
+    let thickness = (cfg.strip_height_logical as f64 * scale) as i32;
+    // The block's main-axis offset: X for horizontal strips, Y for vertical ones.
+    let along = match cfg.edge {
+        Edge::Left | Edge::Right => (anchor.y * scale) as i32,
+        _ => (anchor.x * scale) as i32,
+    };
+    let pos = place_popup(&strip, cfg.edge, cfg.monitor_index, thickness, Some(along), w, h)?;
 
-    detail
-        .set_position(PhysicalPosition::new(x, y))
-        .map_err(|e| e.to_string())?;
+    detail.set_position(pos).map_err(|e| e.to_string())?;
     detail
         .emit("detail://event", &event)
         .map_err(|e| e.to_string())?;
@@ -279,23 +327,16 @@ pub fn open_settings(app: AppHandle, state: State<AppState>) -> Result<(), Strin
         .get_webview_window("settings")
         .ok_or("settings window missing")?;
 
-    let sp = strip.outer_position().map_err(|e| e.to_string())?;
-    let ss = strip.outer_size().map_err(|e| e.to_string())?;
     let scale = strip.scale_factor().unwrap_or(1.0);
     let w = (240.0 * scale) as i32;
     let h = (230.0 * scale) as i32;
+    let thickness = (cfg.strip_height_logical as f64 * scale) as i32;
 
-    // Anchor near the far end of the strip (where the clock is), kept on-screen.
-    let (x, y) = match cfg.edge {
-        Edge::Bottom => (sp.x + ss.width as i32 - w, sp.y - h),
-        Edge::Top => (sp.x + ss.width as i32 - w, sp.y + ss.height as i32),
-        Edge::Left => (sp.x + ss.width as i32, sp.y + ss.height as i32 - h),
-        Edge::Right => (sp.x - w, sp.y + ss.height as i32 - h),
-    };
+    // The clock sits at the far end of the strip (None = far end). place_popup opens
+    // toward the interior and clamps to the monitor.
+    let pos = place_popup(&strip, cfg.edge, cfg.monitor_index, thickness, None, w, h)?;
 
-    settings
-        .set_position(PhysicalPosition::new(x, y))
-        .map_err(|e| e.to_string())?;
+    settings.set_position(pos).map_err(|e| e.to_string())?;
     let _ = app.emit("settings://open", &cfg);
     settings.show().map_err(|e| e.to_string())?;
     settings.set_focus().map_err(|e| e.to_string())?;
